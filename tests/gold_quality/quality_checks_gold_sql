@@ -1,0 +1,130 @@
+/*
+===============================================================================
+Test Script: Validate Gold Layer Views
+===============================================================================
+Script Purpose:
+    This script validates the Gold layer views created in the Data Warehouse.
+    It ensures:
+        - Views exist
+        - Required columns are present
+        - Data quality checks (no unexpected NULLs, key integrity, etc.)
+
+Usage:
+    Run this script after deploying the Gold layer views.
+===============================================================================
+*/
+
+USE DataWarehouse;
+GO
+
+/*=============================================================================
+  Test 1: Check if Views Exist
+=============================================================================*/
+PRINT '--- Test 1: Validating that Gold Views exist ---';
+
+IF OBJECT_ID('gold.dim_customers', 'V') IS NULL
+    RAISERROR('View gold.dim_customers does not exist!', 16, 1);
+ELSE
+    PRINT 'PASS: gold.dim_customers exists.';
+
+IF OBJECT_ID('gold.dim_products', 'V') IS NULL
+    RAISERROR('View gold.dim_products does not exist!', 16, 1);
+ELSE
+    PRINT 'PASS: gold.dim_products exists.';
+
+IF OBJECT_ID('gold.fact_sales', 'V') IS NULL
+    RAISERROR('View gold.fact_sales does not exist!', 16, 1);
+ELSE
+    PRINT 'PASS: gold.fact_sales exists.';
+GO
+
+
+/*=============================================================================
+  Test 2: Column Validation
+  - Ensure critical columns exist in each view
+=============================================================================*/
+PRINT '--- Test 2: Validating required columns in each view ---';
+
+-- gold.dim_customers
+SELECT TOP 0 
+    customer_key, customer_id, customer_number, first_name, last_name, 
+    country, marital_status, gender, birthdate, cst_create_date
+FROM gold.dim_customers;
+
+-- gold.dim_products
+SELECT TOP 0 
+    product_key, product_id, product_number, product_name, category_id,
+    category, subcategory, maintenance, cost, product_line, start_date
+FROM gold.dim_products;
+
+-- gold.fact_sales
+SELECT TOP 0
+    order_number, product_key, customer_key, order_date, shipping_date,
+    due_date, sales_amount, quantity, price
+FROM gold.fact_sales;
+GO
+
+
+/*=============================================================================
+  Test 3: Row Existence Checks
+  - Ensure views are not empty (basic sanity check)
+=============================================================================*/
+PRINT '--- Test 3: Checking if views return rows ---';
+
+IF NOT EXISTS (SELECT 1 FROM gold.dim_customers)
+    RAISERROR('FAIL: gold.dim_customers has no rows!', 16, 1);
+ELSE
+    PRINT 'PASS: gold.dim_customers contains data.';
+
+IF NOT EXISTS (SELECT 1 FROM gold.dim_products)
+    RAISERROR('FAIL: gold.dim_products has no rows!', 16, 1);
+ELSE
+    PRINT 'PASS: gold.dim_products contains data.';
+
+IF NOT EXISTS (SELECT 1 FROM gold.fact_sales)
+    RAISERROR('FAIL: gold.fact_sales has no rows!', 16, 1);
+ELSE
+    PRINT 'PASS: gold.fact_sales contains data.';
+GO
+
+
+/*=============================================================================
+  Test 4: Data Integrity Checks
+  - Surrogate keys should not be NULL
+  - Fact table foreign keys should match dimension keys
+=============================================================================*/
+PRINT '--- Test 4: Data Integrity Checks ---';
+
+-- Surrogate key not NULL in dim_customers
+IF EXISTS (SELECT 1 FROM gold.dim_customers WHERE customer_key IS NULL)
+    RAISERROR('FAIL: gold.dim_customers has NULL surrogate keys!', 16, 1);
+ELSE
+    PRINT 'PASS: gold.dim_customers surrogate keys are valid.';
+
+-- Surrogate key not NULL in dim_products
+IF EXISTS (SELECT 1 FROM gold.dim_products WHERE product_key IS NULL)
+    RAISERROR('FAIL: gold.dim_products has NULL surrogate keys!', 16, 1);
+ELSE
+    PRINT 'PASS: gold.dim_products surrogate keys are valid.';
+
+-- Fact table foreign keys must match dimensions
+IF EXISTS (
+    SELECT f.product_key 
+    FROM gold.fact_sales f
+    LEFT JOIN gold.dim_products p ON f.product_key = p.product_key
+    WHERE p.product_key IS NULL
+)
+    RAISERROR('FAIL: gold.fact_sales has invalid product_key references!', 16, 1);
+ELSE
+    PRINT 'PASS: gold.fact_sales product_key references are valid.';
+
+IF EXISTS (
+    SELECT f.customer_key 
+    FROM gold.fact_sales f
+    LEFT JOIN gold.dim_customers c ON f.customer_key = c.customer_key
+    WHERE c.customer_key IS NULL
+)
+    RAISERROR('FAIL: gold.fact_sales has invalid customer_key references!', 16, 1);
+ELSE
+    PRINT 'PASS: gold.fact_sales customer_key references are valid.';
+GO
